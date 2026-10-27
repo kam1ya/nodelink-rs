@@ -1,0 +1,40 @@
+[package]
+name = "nodelink-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["kam1ya <kamiya-hideki@outlook.com>"]
+license = "MIT"
+description = "High-performance client for Lavalink v4 and NodeLink audio nodes."
+readme = "README.md"
+repository = "https://github.com/your-username/nodelink-rs"
+homepage = "https://github.com/your-username/nodelink-rs"
+documentation = "https://docs.rs/nodelink-rs"
+keywords = ["lavalink", "nodelink", "discord", "audio", "twilight"]
+categories = ["api-bindings", "asynchronous"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls", "tokio-tungstenite/rustls-tls-native-roots"]
+native-tls = ["reqwest/native-tls", "tokio-tungstenite/native-tls"]
+twilight = ["dep:twilight-model"]
+
+[dependencies]
+tokio = { version = "1.38", features = ["sync", "time", "rt", "macros"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dashmap = "6.0"
+thiserror = "2.0.21"
+tracing = "0.1"
+twilight-model = { version = "0.17.1", optional = true }
+url = "2.5.8"
+
+[dev-dependencies]
+tokio = { version = "1.38", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
