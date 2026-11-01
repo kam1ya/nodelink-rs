@@ -1,4 +1,5 @@
-/// Specialized error types and result aliases for `nodelink-rs`.
+//! Specialized error types and result aliases for `nodelink-rs`.
+
 use thiserror::Error;
 
 /// All errors that can occur during communication with Lavalink v4 / NodeLink nodes.

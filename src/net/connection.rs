@@ -1,3 +1,5 @@
+//! Resilient WebSocket connection worker managing handshakes, resuming, and heartbeats.
+
 use crate::model::events::NodeEvent;
 use crate::model::payload::UpdateSessionPayload;
 use crate::model::{TrackEndReason, TrackEventPayload};
@@ -17,9 +19,13 @@ use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info, warn};
 
+/// Background connection manager orchestrating WebSocket communication with the audio node.
 pub(crate) struct Connection;
 
 impl Connection {
+    /// Spawns an asynchronous background task that maintains an active WebSocket connection.
+    ///
+    /// Automatically performs reconnects with exponential backoff on disconnect.
     pub fn spawn(
         ws_url: String,
         password: String,
@@ -48,11 +54,12 @@ impl Connection {
                 if let Err(err) = res {
                     warn!(error = %err, retry_in = ?backoff, "WS interrupted, retrying...");
                     tokio::time::sleep(backoff).await;
+                    // Reset backoff if connection remained stable for at least 30 seconds
                     backoff = if start_time.elapsed() > Duration::from_secs(30) {
                         Duration::from_millis(500)
                     } else {
                         (backoff * 2).min(Duration::from_secs(15))
-                    }
+                    };
                 } else {
                     info!("WS connection closed cleanly. Reconnecting...");
                     backoff = Duration::from_millis(500);
@@ -61,6 +68,7 @@ impl Connection {
         });
     }
 
+    /// Builds the HTTP handshake request including Lavalink authorization and session headers.
     async fn build_request(
         ws_url: &str,
         password: &str,
@@ -74,6 +82,7 @@ impl Connection {
         headers.insert("User-Id", HeaderValue::from_str(&user_id.to_string())?);
         headers.insert("Client-Name", HeaderValue::from_static("nodelink-rs/0.1.0"));
 
+        // If reconnecting with a previously assigned session, provide it for resumption
         if let Some(ref session) = *session_id.read().await {
             if let Ok(val) = HeaderValue::from_str(session) {
                 headers.insert("Session", val);
@@ -83,6 +92,7 @@ impl Connection {
         Ok(req)
     }
 
+    /// Establishes the WebSocket stream and processes inbound frames until disconnection.
     async fn connect_and_listen(
         ws_url: &str,
         password: &str,
@@ -96,6 +106,7 @@ impl Connection {
         let (ws_stream, _) = connect_async(request).await?;
         let (mut writer, mut reader) = ws_stream.split();
 
+        // 20-second heartbeat to detect severed TCP sockets
         let mut heartbeat = interval(Duration::from_secs(20));
         heartbeat.tick().await;
 
@@ -133,6 +144,7 @@ impl Connection {
         Ok(())
     }
 
+    /// Parses inbound JSON payloads, updates in-memory states, and dispatches to subscribers.
     async fn handle_text_payload(
         bytes: &[u8],
         session_id: &Arc<RwLock<Option<String>>>,
@@ -177,6 +189,7 @@ impl Connection {
         let _ = event_tx.send(event);
     }
 
+    /// Handles session readiness and enables automatic session resumption on the node.
     async fn on_ready(sid: &str, session_id: &Arc<RwLock<Option<String>>>, rest: &Arc<RestClient>) {
         let changed = {
             let current = session_id.read().await;
