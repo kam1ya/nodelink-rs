@@ -1,4 +1,4 @@
-//! Search query helpers and source prefixes.
+//! Search query helpers, source prefixes, and identifier formatting.
 
 use std::fmt;
 
@@ -28,6 +28,24 @@ impl SearchSource {
 }
 
 /// A structured query specifying search providers or direct URLs.
+///
+/// Supports automatic conversion from string slices: URLs starting with `http://`
+/// or `https://` are treated as direct URLs, while other strings default to YouTube search.
+///
+/// # Examples
+///
+/// ```
+/// use nodelink_rs::Query;
+///
+/// // Direct constructors
+/// let q1 = Query::youtube("Rick Astley - Never Gonna Give You Up");
+/// let q2 = Query::url("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+/// let q3 = Query::spotify("Daft Punk - Get Lucky");
+///
+/// // Automatic conversion from string
+/// let from_str: Query = "Rick Astley".into();
+/// assert_eq!(from_str, Query::youtube("Rick Astley"));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Query {
     /// Perform a keyword search using the specified source.
@@ -37,14 +55,24 @@ pub enum Query {
 }
 
 impl Query {
-    /// Constructs a YouTube search query.
+    /// Constructs a YouTube search query (`ytsearch:<query>`).
     pub fn youtube(query: impl Into<String>) -> Self {
         Self::Search(SearchSource::YouTube, query.into())
     }
 
-    /// Constructs a SoundCloud search query.
+    /// Constructs a YouTube Music search query (`ytmsearch:<query>`).
+    pub fn youtube_music(query: impl Into<String>) -> Self {
+        Self::Search(SearchSource::YouTubeMusic, query.into())
+    }
+
+    /// Constructs a SoundCloud search query (`scsearch:<query>`).
     pub fn soundcloud(query: impl Into<String>) -> Self {
         Self::Search(SearchSource::SoundCloud, query.into())
+    }
+
+    /// Constructs a Spotify search query (`spsearch:<query>`).
+    pub fn spotify(query: impl Into<String>) -> Self {
+        Self::Search(SearchSource::Spotify, query.into())
     }
 
     /// Constructs a search query using an explicit [`SearchSource`].

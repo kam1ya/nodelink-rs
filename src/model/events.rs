@@ -2,10 +2,12 @@
 
 use super::track::Track;
 use serde::Deserialize;
+use std::time::Duration;
 
 /// Root container for all unsolicited WebSocket messages dispatched by the node.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)]
 pub enum NodeEvent {
     /// Emitted immediately after successful WebSocket handshake.
     #[serde(rename_all = "camelCase")]
@@ -29,6 +31,23 @@ pub enum NodeEvent {
     Event(TrackEventPayload),
 }
 
+impl NodeEvent {
+    /// Returns the target guild snowflake ID if the event is guild-specific.
+    pub fn guild_id(&self) -> Option<&str> {
+        match self {
+            Self::PlayerUpdate { guild_id, .. } => Some(guild_id),
+            Self::Event(ev) => Some(ev.guild_id()),
+            Self::Ready { .. } | Self::Stats(_) => None,
+        }
+    }
+
+    /// Returns `true` if this event is [`NodeEvent::Ready`].
+    #[inline]
+    pub fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready { .. })
+    }
+}
+
 /// Real-time playback status update reported inside [`NodeEvent::PlayerUpdate`].
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -43,7 +62,15 @@ pub struct PlayerStateUpdate {
     pub ping: i64,
 }
 
-/// Specific audio playback events dispatched under `NodeEvent::Event`.
+impl PlayerStateUpdate {
+    /// Returns current playback position as a [`Duration`].
+    #[inline]
+    pub fn position_duration(&self) -> Duration {
+        Duration::from_millis(self.position)
+    }
+}
+
+/// Specific audio playback events dispatched under [`NodeEvent::Event`].
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum TrackEventPayload {
@@ -99,6 +126,30 @@ pub enum TrackEventPayload {
     },
 }
 
+impl TrackEventPayload {
+    /// Returns the target guild snowflake ID associated with this event.
+    pub fn guild_id(&self) -> &str {
+        match self {
+            Self::TrackStartEvent { guild_id, .. }
+            | Self::TrackEndEvent { guild_id, .. }
+            | Self::TrackExceptionEvent { guild_id, .. }
+            | Self::TrackStuckEvent { guild_id, .. }
+            | Self::WebSocketClosedEvent { guild_id, .. } => guild_id,
+        }
+    }
+
+    /// Returns a reference to the associated track, if applicable.
+    pub fn track(&self) -> Option<&Track> {
+        match self {
+            Self::TrackStartEvent { track, .. }
+            | Self::TrackEndEvent { track, .. }
+            | Self::TrackExceptionEvent { track, .. }
+            | Self::TrackStuckEvent { track, .. } => Some(track),
+            Self::WebSocketClosedEvent { .. } => None,
+        }
+    }
+}
+
 /// Termination reason supplied by [`TrackEventPayload::TrackEndEvent`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,6 +192,14 @@ pub struct NodeStats {
     pub cpu: CpuStats,
 }
 
+impl NodeStats {
+    /// Returns the node uptime as a [`Duration`].
+    #[inline]
+    pub fn uptime_duration(&self) -> Duration {
+        Duration::from_millis(self.uptime)
+    }
+}
+
 /// Memory metrics reported by the audio node.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct MemoryStats {
@@ -152,6 +211,20 @@ pub struct MemoryStats {
     pub allocated: u64,
     /// Total reservable physical memory on the host in bytes.
     pub reservable: u64,
+}
+
+impl MemoryStats {
+    /// Memory actively consumed by the node, in megabytes.
+    #[inline]
+    pub fn used_mb(&self) -> u64 {
+        self.used / (1024 * 1024)
+    }
+
+    /// Total committed memory allocated to the node process, in megabytes.
+    #[inline]
+    pub fn allocated_mb(&self) -> u64 {
+        self.allocated / (1024 * 1024)
+    }
 }
 
 /// CPU utilization metrics reported by the audio node.

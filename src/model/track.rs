@@ -1,6 +1,7 @@
 //! Track and playlist models conforming to the Lavalink v4 / NodeLink specification.
 
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// Detailed metadata describing an individual audio track.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -33,6 +34,14 @@ pub struct TrackInfo {
     pub source_name: String,
 }
 
+impl TrackInfo {
+    /// Returns the track duration as a [`Duration`].
+    #[inline]
+    pub fn duration(&self) -> Duration {
+        Duration::from_millis(self.length)
+    }
+}
+
 /// A playable audio track containing its base64 bytecode payload and metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +56,26 @@ pub struct Track {
     /// Client-defined custom metadata preserved across node operations.
     #[serde(default)]
     pub user_data: serde_json::Value,
+}
+
+impl Track {
+    /// Convenient accessor for the track's title.
+    #[inline]
+    pub fn title(&self) -> &str {
+        &self.info.title
+    }
+
+    /// Convenient accessor for the track's author or channel name.
+    #[inline]
+    pub fn author(&self) -> &str {
+        &self.info.author
+    }
+
+    /// Convenient accessor for the track's duration.
+    #[inline]
+    pub fn duration(&self) -> Duration {
+        self.info.duration()
+    }
 }
 
 /// The result returned by `/v4/loadtracks` representing resolved audio resources.
@@ -71,6 +100,24 @@ pub enum LoadResult {
     Empty,
     /// An error occurred during track resolution on the remote node.
     Error(LoadError),
+}
+
+impl LoadResult {
+    /// Returns a slice of tracks if the result contains any tracks, or an empty slice otherwise.
+    pub fn tracks(&self) -> &[Track] {
+        match self {
+            Self::Track(track) => std::slice::from_ref(track),
+            Self::Playlist { tracks, .. } => tracks.as_slice(),
+            Self::Search(tracks) => tracks.as_slice(),
+            Self::Empty | Self::Error(_) => &[],
+        }
+    }
+
+    /// Returns `true` if the result yielded no tracks (either [`LoadResult::Empty`] or an empty search/playlist).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.tracks().is_empty()
+    }
 }
 
 /// Metadata describing a loaded playlist or collection.
